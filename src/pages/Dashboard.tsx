@@ -46,8 +46,8 @@ const Dashboard: React.FC<DashboardProps> = ({ userEmail, setUserEmail }) => {
       />
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col">
-        <DashMain activeTab={activeTab} />
+      <div className="flex-1 flex flex-col ">
+        <DashMain activeTab={activeTab} userEmail={userEmail} />
       </div>
     </div>
   );
@@ -81,7 +81,6 @@ const DashboardNav: React.FC<DashboardNavProps> = ({
 
         {/* Navigation Links */}
         <nav className="space-y-3 dashNav">
-          <p className="text-gray-300">Dashboard Links</p>
           <button
             onClick={() => handleNavClick("dashboard")}
             className={`w-full text-left px-3 py-2 rounded-lg transition ${
@@ -89,22 +88,6 @@ const DashboardNav: React.FC<DashboardNavProps> = ({
             }`}
           >
             Home
-          </button>
-          <button
-            onClick={() => handleNavClick("settings")}
-            className={`w-full text-left px-3 py-2 rounded-lg transition ${
-              activeTab === "settings" ? "bg-white/20" : "hover:bg-white/20"
-            }`}
-          >
-            Settings
-          </button>
-          <button
-            onClick={() => handleNavClick("profile")}
-            className={`w-full text-left px-3 py-2 rounded-lg transition ${
-              activeTab === "profile" ? "bg-white/20" : "hover:bg-white/20"
-            }`}
-          >
-            Profile
           </button>
 
           {/* Exam Bank Section */}
@@ -126,14 +109,6 @@ const DashboardNav: React.FC<DashboardNavProps> = ({
             }`}
           >
             Exam Builder
-          </button>
-          <button
-            onClick={() => handleNavClick("generateExam")}
-            className={`w-full text-left px-3 py-2 rounded-lg transition ${
-              activeTab === "generateExam" ? "bg-white/20" : "hover:bg-white/20"
-            }`}
-          >
-            Generate Exam
           </button>
         </nav>
       </div>

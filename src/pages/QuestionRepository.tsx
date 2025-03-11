@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState } from "react";
 import Tesseract from "tesseract.js";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -6,94 +6,96 @@ import "react-toastify/dist/ReactToastify.css";
 interface Question {
   id: number;
   text: string;
+  options: string[];
+  answer: string;
+  form: string;
+  class: string;
 }
+
+const API_URL = "http://localhost:8000/questions/";
 
 const QuestionRepository: React.FC = () => {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [newQuestion, setNewQuestion] = useState("");
-  const [queuedQuestions, setQueuedQuestions] = useState<Question[]>([]);
-  const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
+  const [selectedForm, setSelectedForm] = useState("Form 1");
+  const [selectedClass, setSelectedClass] = useState("A");
+  const [options, setOptions] = useState<string[]>([]);
+  const [answer, setAnswer] = useState("");
   const [extractedText, setExtractedText] = useState("");
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const textAreaRef = useRef<HTMLTextAreaElement>(null);
 
-  const addQuestion = () => {
-    if (newQuestion.trim() === "") return;
-    const question = { id: Date.now(), text: newQuestion };
-    setQuestions([...questions, question]);
-    setQueuedQuestions([...queuedQuestions, question]);
-    setNewQuestion("");
-  };
-
-  const deleteQuestion = (id: number) => {
-    setQuestions(questions.filter((q) => q.id !== id));
-    setQueuedQuestions(queuedQuestions.filter((q) => q.id !== id));
-  };
-
-  const sendQuestionsToStorage = async () => {
-    try {
-      const response = await fetch("https://your-storage-api.com/questions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(queuedQuestions),
-      });
-      if (response.ok) {
-        setQueuedQuestions([]);
-        toast.success("Questions sent to storage successfully!");
-      } else {
-        toast.error("Failed to send questions to storage.");
-      }
-    } catch (error) {
-      console.error("Error sending questions to storage:", error);
-      toast.error("An error occurred while sending questions to storage.");
-    }
-  };
-
+  // ✅ Extract text from image using Tesseract.js
   const extractTextFromImage = (image: File) => {
     const reader = new FileReader();
-    reader.onload = () => {
-      setSelectedImage(reader.result as string);
-    };
+    reader.onload = () => setSelectedImage(reader.result as string);
     reader.readAsDataURL(image);
 
-    Tesseract.recognize(image, "eng", {
-      logger: (m) => console.log(m),
-    }).then(({ data: { text } }) => {
-      setExtractedText(text);
-      toast.info(
-        "Text extracted. You can now select and add text to questions."
-      );
-    });
+    Tesseract.recognize(image, "eng", { logger: (m) => console.log(m) })
+      .then(({ data: { text } }) => {
+        setExtractedText(text);
+        toast.info("Text extracted successfully!");
+      })
+      .catch(() => toast.error("Failed to extract text."));
   };
 
-  const startEditing = (question: Question) => {
-    setEditingQuestion(question);
-    setNewQuestion(question.text);
+  // ✅ Fill the form with selected text for editing
+  const fillFormWithSelectedText = () => {
+    const selectedText = window.getSelection()?.toString().trim();
+    if (!selectedText) {
+      toast.warn("No text selected!");
+      return;
+    }
+
+    setNewQuestion(selectedText);
+    toast.success("Selected text added to form for editing.");
   };
 
-  const saveEditedQuestion = () => {
-    if (editingQuestion) {
-      const updatedQuestions = questions.map((q) =>
-        q.id === editingQuestion.id ? { ...q, text: newQuestion } : q
-      );
-      setQuestions(updatedQuestions);
-      setQueuedQuestions(updatedQuestions);
-      setEditingQuestion(null);
-      setNewQuestion("");
+  // ✅ Send question to FastAPI backend
+  const sendQuestionToBackend = async (question: Question) => {
+    try {
+      const response = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(question),
+      });
+
+      if (!response.ok) throw new Error("Failed to save question.");
+
+      toast.success("Question saved to backend!");
+    } catch {
+      toast.error("Error saving question.");
     }
   };
 
-  const addSelectedTextToQuestions = () => {
-    const selectedText = window.getSelection()?.toString();
-    if (selectedText && selectedText.trim() !== "") {
-      const question = { id: Date.now(), text: selectedText.trim() };
-      setQuestions([...questions, question]);
-      setQueuedQuestions([...queuedQuestions, question]);
+  // ✅ Add a new question from the form
+  const addQuestion = () => {
+    if (!newQuestion.trim()) {
+      toast.warn("Question text is empty!");
+      return;
     }
+
+    const question: Question = {
+      id: Date.now(),
+      text: newQuestion.trim(),
+      options: options.filter((opt) => opt.trim() !== ""),
+      answer: answer.trim(),
+      form: selectedForm,
+      class: selectedClass,
+    };
+
+    setQuestions((prev) => [...prev, question]);
+    sendQuestionToBackend(question);
+    resetForm();
   };
 
+  // ✅ Reset form inputs
+  const resetForm = () => {
+    setNewQuestion("");
+    setOptions([]);
+    setAnswer("");
+  };
+
+  // ✅ Handle file drop
   const handleFileDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
@@ -106,36 +108,66 @@ const QuestionRepository: React.FC = () => {
       <ToastContainer />
       <h1 className="text-3xl font-bold mb-4">Question Repository</h1>
 
-      {/* Add/Edit Question Form */}
-      <div className="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-2 mb-4">
+      {/* Message for Drag and Drop */}
+      <p className="mb-4 text-gray-700">
+        Drag and drop an image file below or click to upload for text
+        extraction.
+      </p>
+
+      {/* Question Input Form */}
+      <div className="flex flex-wrap gap-2 mb-4">
         <input
           type="text"
           placeholder="Enter a question"
           value={newQuestion}
           onChange={(e) => setNewQuestion(e.target.value)}
           className="border px-4 py-2 w-full rounded-lg text-black"
-          title="Enter a question here"
         />
-        {editingQuestion ? (
-          <button
-            onClick={saveEditedQuestion}
-            className="bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700 transition"
-            title="Save the edited question"
-          >
-            Save
-          </button>
-        ) : (
-          <button
-            onClick={addQuestion}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
-            title="Add the question"
-          >
-            Add
-          </button>
-        )}
+        <input
+          type="text"
+          placeholder="Enter options (comma separated)"
+          value={options.join(", ")}
+          onChange={(e) =>
+            setOptions(e.target.value.split(",").map((opt) => opt.trim()))
+          }
+          className="border px-4 py-2 w-full rounded-lg text-black"
+        />
+        <input
+          type="text"
+          placeholder="Enter the answer"
+          value={answer}
+          onChange={(e) => setAnswer(e.target.value)}
+          className="border px-4 py-2 w-full rounded-lg text-black"
+        />
+        <select
+          value={selectedForm}
+          onChange={(e) => setSelectedForm(e.target.value)}
+          className="border px-4 py-2 rounded-lg"
+        >
+          <option>Form 1</option>
+          <option>Form 2</option>
+          <option>Form 3</option>
+          <option>Form 4</option>
+        </select>
+        <select
+          value={selectedClass}
+          onChange={(e) => setSelectedClass(e.target.value)}
+          className="border px-4 py-2 rounded-lg"
+        >
+          <option>A</option>
+          <option>B</option>
+          <option>C</option>
+          <option>D</option>
+        </select>
+        <button
+          onClick={addQuestion}
+          className="bg-blue-600 text-white px-4 py-2 rounded-lg"
+        >
+          Add
+        </button>
       </div>
 
-      {/* Upload Image for Text Extraction */}
+      {/* Image Upload */}
       <div
         className="mb-4 border-2 border-dashed border-gray-500 p-4 rounded-lg text-center cursor-pointer"
         onDrop={handleFileDrop}
@@ -146,80 +178,70 @@ const QuestionRepository: React.FC = () => {
           type="file"
           accept="image/*"
           onChange={(e) => {
-            if (e.target.files && e.target.files[0]) {
-              extractTextFromImage(e.target.files[0]);
-            }
+            if (e.target.files?.[0]) extractTextFromImage(e.target.files[0]);
           }}
           className="hidden"
         />
         <p>Drag and drop an image here or click to upload</p>
       </div>
 
-      {/* Display Selected Image and Extracted Text */}
-      {selectedImage && (
-        <div className="flex flex-col md:flex-row mb-4">
-          <div className="w-full md:w-1/2 pr-0 md:pr-2 mb-4 md:mb-0">
+      {/* Image and Extracted Text Side by Side */}
+      <div className="flex gap-4 mt-6">
+        {/* Uploaded Image */}
+        {selectedImage && (
+          <div className="w-1/2">
             <img
               src={selectedImage}
-              alt="Selected"
-              className="w-full rounded-lg"
+              alt="Uploaded"
+              className="w-full rounded-lg border shadow-lg"
             />
           </div>
-          <div className="w-full md:w-1/2 pl-0 md:pl-2 relative">
+        )}
+
+        {/* Extracted Text */}
+        {extractedText && (
+          <div className="w-1/2">
             <textarea
-              ref={textAreaRef}
               value={extractedText}
               onChange={(e) => setExtractedText(e.target.value)}
-              className="border px-4 py-2 w-full h-40 rounded-lg text-black"
-              title="Edit the extracted text here"
-            />
-            <button
-              onClick={addSelectedTextToQuestions}
-              className="mt-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
-              title="Add selected text to questions"
-            >
-              Add Selected Text to Questions
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Questions List */}
-      <ul className="mb-4">
-        {questions.map((q) => (
-          <li
-            key={q.id}
-            className="flex justify-between items-center bg-gray-800 p-3 rounded-lg mb-2"
-          >
-            <span>{q.text}</span>
-            <div className="flex space-x-2">
+              className="border p-2 w-full h-40"
+            ></textarea>
+            <div className="flex gap-2 mt-2">
               <button
-                onClick={() => startEditing(q)}
-                className="bg-yellow-500 text-white px-2 py-1 rounded-lg hover:bg-yellow-600 transition"
-                title="Edit this question"
+                onClick={fillFormWithSelectedText}
+                className="bg-blue-600 text-white px-4 py-2"
               >
-                Edit
+                Add Selected Text
               </button>
               <button
-                onClick={() => deleteQuestion(q.id)}
-                className="bg-red-500 text-white px-2 py-1 rounded-lg hover:bg-red-600 transition"
-                title="Delete this question"
+                onClick={() => setExtractedText("")}
+                className="bg-gray-600 text-white px-4 py-2"
               >
-                Delete
+                Clear Extracted Text
               </button>
             </div>
-          </li>
-        ))}
-      </ul>
+          </div>
+        )}
+      </div>
 
-      {/* Send Questions to Storage */}
-      <button
-        onClick={sendQuestionsToStorage}
-        className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition"
-        title="Send all questions to storage"
-      >
-        Send to Storage
-      </button>
+      {/* Display Added Questions */}
+      {questions.length > 0 && (
+        <div className="mt-6">
+          <h2 className="text-xl font-bold mb-2">Added Questions</h2>
+          <ul className="border p-4 rounded-lg bg-gray-100">
+            {questions.map((q) => (
+              <li key={q.id} className="border-b p-2">
+                <strong>{q.text}</strong>
+                {q.options.length > 0 && <p>Options: {q.options.join(", ")}</p>}
+                {q.answer && <p>Answer: {q.answer}</p>}
+                <p>
+                  Form: {q.form}, Class: {q.class}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 };
